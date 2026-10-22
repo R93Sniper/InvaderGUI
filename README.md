@@ -7,12 +7,18 @@ You are **_required_** to have an install of Invader for this wrapper to work. T
 This was built against Invader version `0.55.0.r4134.33518109`, which is the latest version as of time of creation.
 
 
-Installation Instructions
+Installation Instructions (Windows)
 ----------------------------------------------------------------------------------------------
 1. Go to the releases tab and download the built files.
 2. Ensure you have the [.NET 8 Runtime installed](https://dotnet.microsoft.com/en-us/download/dotnet/8.0).
 3. Run the `.exe` file and enjoy your modding experience!
 
+Installation Instructions (Linux)
+----------------------------------------------------------------------------------------------
+1. Go to the releases tab and download the built files.
+2. Run the `.exe` through Wine.
+3. If asked to install .dotnet8, download it and run on the same wine prefix.
+4. Enjoy your modding experience!
 
 Features
 ----------------------------------------------------------------------------------------------
