@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Threading;
 using InvaderGui.Core;
 
@@ -236,7 +237,42 @@ public partial class MainWindow : Window
         if (activate) activity.Activate();
         activity.Select(runId);
     }
-    private void About(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Invader GUI\nWindows / WPF / .NET 8\nCompatibility target: supplied Invader 0.55.0.r4134.33518109\n\nAll non-Refactor tool forms are available for testing. Refactor planner: Phase 5.\n\nStopping a task does not undo filesystem changes.", "About Invader GUI");
+    private void About(object sender, RoutedEventArgs e)
+    {
+        var dialog = new UtilityWindow
+        {
+            Owner = this,
+            Title = "About Invader GUI",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ShowInTaskbar = false
+        };
+        var content = DialogUi.Column();
+        content.Children.Add(DialogUi.Text("Invader GUI\n\nBuild 1.0.0\nInvader Version 0.55.0.r4134.33518109\n\nLicensed under GPLv3\nSource Code Available here:"));
+        var link = new Hyperlink(new Run("https://github.com/R93Sniper/InvaderGUI/"))
+        {
+            NavigateUri = new Uri("https://github.com/R93Sniper/InvaderGUI/"),
+            Foreground = System.Windows.Media.Brushes.LightSkyBlue
+        };
+        link.RequestNavigate += (_, args) =>
+        {
+            args.Handled = true;
+            try { Process.Start(new ProcessStartInfo(args.Uri.AbsoluteUri) { UseShellExecute = true }); }
+            catch (Exception ex) { DialogUi.Error(dialog, ex); }
+        };
+        var source = DialogUi.Text("");
+        source.Inlines.Add(link);
+        content.Children.Add(source);
+        var close = DialogUi.Button("OK", () => dialog.Close());
+        close.IsDefault = true;
+        close.IsCancel = true;
+        close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.MinWidth = 75;
+        content.Children.Add(close);
+        dialog.Content = content;
+        dialog.ShowDialog();
+    }
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
