@@ -1,5 +1,7 @@
 # Invader GUI
 Invader GUI is a Visual Wrapper for SnowyMouse's Halo Combat Evolved Toolkit Invader. 
+![Invader GUI Main Interface Window](images/main-window.png)
+
 
 **This project is not officially associated or affiliated with SnowyMouse or Invader, nor is it endorsed by them.**</br>
 This project exists explicitly to provide an easier time for those who are either not comfortable with Invader's CLI interface or simply do not want to interact with it.</br>
@@ -31,7 +33,7 @@ Tag Handling - `invader-bludgeon`, `invader-strip`, `invader-convert`, `invader-
 Map Tools - `invader-info`, `invader-crc`, and `invader-index` </br>
 The remaining tools (`invader-archive`, `invader-compile`, `invader-compare`, and `invader-refactor`) are their own tabs.</br>
 
-
+![Invader GUI Refactor Window](images/refactor-window.png)
 `invader-refactor` has its own unique window to allow you to build a full stack of refactor commands and execute them. </br>
 There is a preview of the current and planned directories, as well as a full execution stack that can be reordered at will.</br>
 You can save and load stacks of commands as `.txt`, `.bat`, and `.json` files.</br>
