@@ -5,6 +5,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>InvaderGui</AssemblyName>
     <RootNamespace>InvaderGui.App</RootNamespace>
+    <NeutralLanguage>en-US</NeutralLanguage>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\InvaderGui.Core\InvaderGui.Core.csproj" />
