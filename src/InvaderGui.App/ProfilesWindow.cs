@@ -11,6 +11,7 @@ public sealed class ProfilesWindow : UtilityWindow
     private readonly ListBox profiles = new() { MinWidth = 200, Margin = new Thickness(0, 0, 12, 0), DisplayMemberPath = "Name" };
     private readonly StackPanel editor = DialogUi.Column();
     private ProjectProfile? draft;
+    private string? savedEditorState;
     private Guid? loadedId;
     private TextBox? name, working, data, maps, resources;
     private ListBox? roots;
@@ -53,11 +54,12 @@ public sealed class ProfilesWindow : UtilityWindow
     {
         Capture();
         if (draft is null) return true;
-        var original = state.Profiles.Value.Profiles.FirstOrDefault(p => p.Id == draft.Id);
-        if (original is not null && JsonSerializer.Serialize(original, JsonFiles.Options) == JsonSerializer.Serialize(draft, JsonFiles.Options)) return true;
+        if (savedEditorState == EditorState(draft)) return true;
         var choice = MessageBox.Show(this, "Save profile edits before continuing? Choose No to discard these editor changes.", "Profile edits", MessageBoxButton.YesNoCancel);
         return choice == MessageBoxResult.No || (choice == MessageBoxResult.Yes && Save());
     }
+    private static string EditorState(ProjectProfile profile) =>
+        JsonSerializer.Serialize(new { profile.Name, profile.WorkingDirectory, profile.Paths }, JsonFiles.Options);
     private void Select(Guid? id)
     {
         refreshing = true;
@@ -79,13 +81,14 @@ public sealed class ProfilesWindow : UtilityWindow
     private void Load(ProjectProfile? profile)
     {
         draft = profile; loadedId = profile?.Id; editor.Children.Clear();
+        savedEditorState = profile is not null && state.Profiles.Value.Profiles.Any(p => p.Id == profile.Id) ? EditorState(profile) : null;
         if (profile is null) { editor.Children.Add(DialogUi.Text("Create a profile to configure your editing kit folders.")); return; }
         editor.Children.Add(DialogUi.Text("Editing kit paths apply to future tasks. Running tasks keep the profile and paths captured at launch. Relative data, maps, and tag folders resolve beneath the Editing Kit Folder and need not exist yet."));
         name = DialogUi.Field(editor, "Profile name", profile.Name);
         working = DialogUi.Folder(editor, "Editing Kit Folder (existing absolute folder)", profile.WorkingDirectory, this);
         data = DialogUi.Folder(editor, "Data root", profile.Paths.DataRoot, this);
         maps = DialogUi.Folder(editor, "Maps root", profile.Paths.MapsRoot, this);
-        resources = DialogUi.Folder(editor, "Resource maps root (blank uses operation default)", profile.Paths.ResourceMapsRoot ?? "", this);
+        resources = DialogUi.Folder(editor, "Resource maps root (Only used when building gearbox maps)", profile.Paths.ResourceMapsRoot ?? "", this);
         editor.Children.Add(DialogUi.Text("Tag roots — first has highest precedence. Single-root operations will select an explicit root."));
         roots = new ListBox { Height = 140 }; editor.Children.Add(roots); RefreshRoots();
         var rootButtons = DialogUi.Row(); editor.Children.Add(rootButtons);
@@ -94,9 +97,9 @@ public sealed class ProfilesWindow : UtilityWindow
         rootButtons.Children.Add(DialogUi.Button("Remove", () =>
         {
             if (roots.SelectedItem is not TagRoot root) return;
-            if (draft!.OperationState.Values.Any(value => ContainsValue(value, root.Id)))
-            { MessageBox.Show(this, "This root is selected by retained operation settings. Update those selections before removing the root."); return; }
-            draft.Paths.TagRoots.Remove(root); RefreshRoots();
+            if (!draft!.RemoveTagRoot(root.Id))
+            { MessageBox.Show(this, "Keep at least one tag root in the profile. Add a replacement folder before removing this one."); return; }
+            RefreshRoots();
         }));
         rootButtons.Children.Add(DialogUi.Button("Up", () => MoveRoot(-1)));
         rootButtons.Children.Add(DialogUi.Button("Down", () => MoveRoot(1)));
@@ -108,13 +111,6 @@ public sealed class ProfilesWindow : UtilityWindow
         }));
         actions.Children.Add(DialogUi.Button("Close", Close));
     }
-    private static bool ContainsValue(JsonElement element, string value) => element.ValueKind switch
-    {
-        JsonValueKind.String => element.GetString() == value,
-        JsonValueKind.Object => element.EnumerateObject().Any(p => ContainsValue(p.Value, value)),
-        JsonValueKind.Array => element.EnumerateArray().Any(e => ContainsValue(e, value)),
-        _ => false
-    };
     private void RefreshRoots(TagRoot? select = null)
     {
         roots!.ItemsSource = null; roots.ItemsSource = draft!.Paths.TagRoots; roots.SelectedItem = select;
@@ -150,6 +146,7 @@ public sealed class ProfilesWindow : UtilityWindow
         if (index < 0) state.Profiles.Value.Profiles.Add(draft.Copy()); else state.Profiles.Value.Profiles[index] = draft.Copy();
         state.Profiles.MarkDirty(); state.RefreshProfiles(state.SelectedProfile?.Id ?? draft.Id);
         DialogUi.SaveWithRecovery(this, state);
+        savedEditorState = EditorState(draft);
         // List<T> and the profile model do not notify WPF when a row is added/replaced.
         // Rebind the sidebar after saving, retaining the editor and its selected identity.
         RefreshList(draft.Id);

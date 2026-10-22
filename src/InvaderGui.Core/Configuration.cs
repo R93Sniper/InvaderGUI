@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace InvaderGui.Core;
@@ -62,6 +63,41 @@ public sealed class ProjectProfile
 
     public ProjectProfile Copy() => JsonSerializer.Deserialize<ProjectProfile>(JsonSerializer.Serialize(this, JsonFiles.Options), JsonFiles.Options)!;
 
+    public bool RemoveTagRoot(string rootId)
+    {
+        var root = Paths.TagRoots.FirstOrDefault(r => r.Id == rootId);
+        if (root is null || Paths.TagRoots.Count <= 1) return false;
+        Paths.TagRoots.Remove(root);
+        var replacementId = Paths.TagRoots[0].Id;
+        foreach (var (operation, saved) in OperationState.ToArray())
+        {
+            if (saved.ValueKind != JsonValueKind.Object) continue;
+            var settings = JsonNode.Parse(saved.GetRawText())!.AsObject();
+            bool changed = false;
+            if (settings["selectedTagRootId"] is JsonValue selected && selected.TryGetValue<string>(out var selectedId) && selectedId == rootId)
+            {
+                settings["selectedTagRootId"] = replacementId;
+                changed = true;
+            }
+            if (settings["tagRootIds"] is JsonArray ids)
+            {
+                bool removedSelection = false;
+                for (int i = ids.Count - 1; i >= 0; i--)
+                {
+                    if (ids[i] is JsonValue value && value.TryGetValue<string>(out var id) && id == rootId)
+                    {
+                        ids.RemoveAt(i);
+                        removedSelection = true;
+                        changed = true;
+                    }
+                }
+                if (removedSelection && ids.Count == 0) ids.Add(replacementId);
+            }
+            if (changed) OperationState[operation] = JsonSerializer.SerializeToElement(settings, JsonFiles.Options);
+        }
+        return true;
+    }
+
     public IReadOnlyList<string> Validate()
     {
         var errors = new List<string>();
@@ -79,7 +115,7 @@ public sealed class ProjectProfile
         }
         ValidatePath(Paths.DataRoot, "Data root", errors);
         ValidatePath(Paths.MapsRoot, "Maps root", errors);
-        if (Paths.ResourceMapsRoot is not null) ValidatePath(Paths.ResourceMapsRoot, "Resource maps root", errors);
+        if (!string.IsNullOrWhiteSpace(Paths.ResourceMapsRoot)) ValidatePath(Paths.ResourceMapsRoot, "Resource maps root", errors);
         return errors;
     }
 
@@ -100,6 +136,8 @@ public sealed class ProfilePaths
     public List<TagRoot> TagRoots { get; set; } = new();
     public string MapsRoot { get; set; } = "maps";
     public string? ResourceMapsRoot { get; set; }
+    [JsonIgnore]
+    public string EffectiveResourceMapsRoot => string.IsNullOrWhiteSpace(ResourceMapsRoot) ? MapsRoot : ResourceMapsRoot;
 }
 public sealed class TagRoot
 {
