@@ -16,6 +16,7 @@ public sealed class ToolOperationForm : StackPanel
     private readonly TextBlock validation = DialogUi.Text("");
     private readonly TextBlock result = DialogUi.Text("");
     private ProjectProfile? loadedProfile;
+    private TagHandlingValidation? cachedValidation;
     private ToolFormState model;
     private bool building;
     private string? loadError;
@@ -390,14 +391,17 @@ public sealed class ToolOperationForm : StackPanel
     private void Edited()
     {
         if (building || loadedProfile is null || loadError is not null) return;
+        cachedValidation = null;
         loadedProfile.OperationState[OperationId] = model.Write(); shell.Profiles.MarkDirty(); nextSave = DateTime.UtcNow.AddMilliseconds(700);
         ApplyEnabled(); RefreshValidation();
     }
     public void Flush() { if (shell.Profiles.IsDirty) shell.Profiles.Save(); nextSave = DateTime.MaxValue; }
-    public void RefreshContext()
+    public void RefreshContext(bool revalidate = false)
     {
+        if (revalidate) cachedValidation = null;
         if (!ReferenceEquals(loadedProfile, shell.SelectedProfile))
         {
+            cachedValidation = null;
             Flush(); loadedProfile = shell.SelectedProfile; model = ToolForms.New(OperationId); loadError = null;
             if (loadedProfile?.OperationState.TryGetValue(OperationId, out var saved) == true)
             {
@@ -415,7 +419,7 @@ public sealed class ToolOperationForm : StackPanel
     private RunView? LastHistory() => shell.History.FirstOrDefault(r => r.Snapshot.PageId == OperationId && r.Snapshot.ProfileId == loadedProfile?.Id);
     private void RefreshValidation()
     {
-        var operation = Operations.All.Single(o => o.Id == OperationId); var check = ToolForms.Build(OperationId, model, loadedProfile);
+        var operation = Operations.All.Single(o => o.Id == OperationId); var check = cachedValidation ??= ToolForms.Build(OperationId, model, loadedProfile);
         var available = shell.Scan?.For(operation).Available == true; var busy = shell.Coordinator.Owner(operation.SlotId);
         validation.Text = loadError is not null ? "Reset or repair the saved form before starting." : busy is not null ? $"Busy: {busy.Snapshot.OperationName} · {busy.Snapshot.ProfileName}. Open Output Log to monitor or cancel." :
             !available ? $"Unavailable: {operation.Executable}. Use Invader to select its installation." : check.Invocation is null ? string.Join("\n", check.Errors) : "Ready. " + check.Invocation.Summary;
@@ -428,7 +432,7 @@ public sealed class ToolOperationForm : StackPanel
         try
         {
             RefreshContext(); if (loadError is not null) throw new InvalidOperationException("Reset or repair the saved form first.");
-            var check = ToolForms.Build(OperationId, model, loadedProfile); if (check.Invocation is not { } invocation) throw new ArgumentException(string.Join("\n", check.Errors));
+            var check = cachedValidation = ToolForms.Build(OperationId, model, loadedProfile); if (check.Invocation is not { } invocation) throw new ArgumentException(string.Join("\n", check.Errors));
             if (shell.Scan is null) throw new InvalidOperationException("Select an Invader installation.");
             Edited(); Flush();
             var operation = Operations.All.Single(o => o.Id == OperationId);

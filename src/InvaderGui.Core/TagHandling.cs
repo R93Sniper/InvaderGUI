@@ -142,6 +142,8 @@ public static class TagHandlingBuilder
         if (state.GetType() != TagHandlingStates.New(operation).GetType()) throw new ArgumentException("State does not match its operation.");
         var errors = OptionErrors(state).ToList();
         if (profile is null) { errors.Add("Select an editing kit profile."); return new(null, errors); }
+        if (state is not BatchTagState { Batch: true } && string.IsNullOrWhiteSpace(state.Input))
+            errors.Add("Enter a logical tag path beneath the selected folder, without traversal or wildcard characters.");
         errors.AddRange(profile.Validate()); if (errors.Count > 0) return new(null, errors);
         try
         {

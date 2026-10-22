@@ -12,7 +12,7 @@ public sealed class ActivityWindow : UtilityWindow
     private readonly ShellViewModel state;
     private readonly ListBox list = new() { Height = 165, Margin = new Thickness(0, 0, 0, 8) };
     private readonly TextBox summary = new() { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Height = 155 };
-    private readonly TextBox output = new() { IsReadOnly = true, AcceptsReturn = true, AcceptsTab = true, FontFamily = new System.Windows.Media.FontFamily("Consolas"), VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly TextBox output = new() { IsReadOnly = true, AcceptsReturn = true, AcceptsTab = true, FontFamily = new System.Windows.Media.FontFamily("Courier New"), VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly Button cancel;
     private readonly Button clearSelected, clearAll;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(250) };

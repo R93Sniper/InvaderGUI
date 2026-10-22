@@ -23,6 +23,11 @@ public partial class MainWindow : Window
     private string? selectorSlot;
     private OperationDefinition operation = Operations.All[0];
     private readonly HashSet<Guid> announcedFailures = new();
+    private string? displayedOperation;
+    private ProjectProfile? editorProfile;
+    private InstallationScan? editorScan;
+    private string? editorDirectory;
+    private bool editorAvailabilityChecked;
 
     public MainWindow()
     {
@@ -84,15 +89,17 @@ public partial class MainWindow : Window
     }
     private void Tick()
     {
-        Render();
+        var trace = SessionDiagnostics.BeginRefresh(operation.Id);
+        Render(trace);
         foreach (var run in state.Coordinator.Runs)
         {
             var view = run.View;
             if ((view.Status is RunStatus.NonzeroExit or RunStatus.StartFailed || view.Diagnostic?.StartsWith("Invader reported tag errors.", StringComparison.Ordinal) == true) && announcedFailures.Add(view.Snapshot.RunId) && state.Settings.Value.Logs.OpenActivityOnFailure)
                 OpenActivityInBackground(run.Snapshot.RunId);
         }
+        if (trace) SessionDiagnostics.Write("Idle refresh completed");
     }
-    private void Render()
+    private void Render(bool trace = false)
     {
         if (!ready || TaskList.SelectedItem is not NavigationItem navigation) return;
         var choices = Operations.Visible.Where(o => o.SlotId == navigation.SlotId).ToArray();
@@ -109,6 +116,8 @@ public partial class MainWindow : Window
             finally { updatingSelector = false; }
         }
         operation = OperationSelector.SelectedItem as OperationDefinition ?? choices[0];
+        var operationChanged = displayedOperation != operation.Id;
+        displayedOperation = operation.Id;
         TaskHeading.Text = navigation.Name;
         TaskHeading.ToolTip = operation.Description;
         OperationSelector.Visibility = choices.Length > 1 ? Visibility.Visible : Visibility.Collapsed;
@@ -128,9 +137,11 @@ public partial class MainWindow : Window
         BuildMapScroll.Visibility = isBuildMap ? Visibility.Visible : Visibility.Collapsed;
         BuildMapStatusScroll.Visibility = isBuildMap ? Visibility.Visible : Visibility.Collapsed;
         if (isBuildMap) PrimaryAction.Content = "Build map";
-        buildMap.RefreshContext();
+        if (trace) SessionDiagnostics.Write("Idle refresh: Build Map context");
+        buildMap.RefreshContext(revalidate: operationChanged && isBuildMap);
         TagHandlingScroll.Visibility = TagHandlingStatusScroll.Visibility = isTagHandling ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var form in tagForms.Values) form.RefreshContext();
+        if (trace) SessionDiagnostics.Write("Idle refresh: Tag Handling contexts");
+        foreach (var form in tagForms.Values) form.RefreshContext(revalidate: operationChanged && form.OperationId == operation.Id);
         if (isTagHandling)
         {
             var form = tagForms[operation.Id];
@@ -140,14 +151,16 @@ public partial class MainWindow : Window
         ToolFormScroll.Visibility = ToolFormStatusScroll.Visibility = isToolForm ? Visibility.Visible : Visibility.Collapsed;
         if (isToolForm)
         {
+            if (trace) SessionDiagnostics.Write("Idle refresh: active tool context");
             var form = toolForms[operation.Id];
             if (!ReferenceEquals(ToolFormHost.Content, form)) { ToolFormHost.Content = form; ToolFormStatusHost.Content = form.StatusPanel; }
-            form.RefreshContext();
+            form.RefreshContext(revalidate: operationChanged);
             PrimaryAction.Content = operation.Id == "map-crc" ? form.FormState.Get("mode", "inspect") switch { "inspect" => "Inspect CRC", "fix-header" => "Fix map header", _ => "Forge map CRC" } : operation.Name;
         }
         var headerFolder = operation.SlotId is "asset-interchange" or "tag-handling" or "build-map";
         AssetTagFolderColumn.Width = headerFolder || isRefactor ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         RefactorTagFolderHost.Visibility = isRefactor ? Visibility.Visible : Visibility.Collapsed;
+        if (trace) SessionDiagnostics.Write("Idle refresh: Refactor context and controls");
         if (isRefactor) refactorPreview.RefreshProfile(state.SelectedProfile);
         RefactorRefreshButton.IsEnabled = !refactorPreview.IsExecuting;
         RefactorStopButton.IsEnabled = refactorPreview.IsExecuting && !refactorPreview.StopRequested;
@@ -157,15 +170,24 @@ public partial class MainWindow : Window
         AssetTagFolderHost.Content = !headerFolder ? null : isBuildMap ? buildMap.TagFolderSelector : isTagHandling ? tagForms[operation.Id].TagFolderSelector : toolForms[operation.Id].TagFolderSelector;
         var profile = state.SelectedProfile;
         ProjectFolderButton.IsEnabled = profile is not null && Directory.Exists(profile.WorkingDirectory);
-        try
+        if (trace) SessionDiagnostics.Write("Idle refresh: editor availability");
+        if (!editorAvailabilityChecked || !ReferenceEquals(editorProfile, profile) ||
+            !ReferenceEquals(editorScan, state.Scan) || editorDirectory != state.Settings.Value.Installation.Directory || operationChanged)
         {
-            _ = EditorLauncher.CreateStartInfo(state.Settings.Value.Installation.Directory, profile);
-            EditorButton.IsEnabled = true;
-            EditorButton.ToolTip = "Launch invader-edit-qt with this profile's ordered tag roots. The editor runs independently.";
-        }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            EditorButton.IsEnabled = false; EditorButton.ToolTip = ex.Message;
+            editorAvailabilityChecked = true;
+            editorProfile = profile;
+            editorScan = state.Scan;
+            editorDirectory = state.Settings.Value.Installation.Directory;
+            try
+            {
+                _ = EditorLauncher.CreateStartInfo(state.Settings.Value.Installation.Directory, profile);
+                EditorButton.IsEnabled = true;
+                EditorButton.ToolTip = "Launch invader-edit-qt with this profile's ordered tag roots. The editor runs independently.";
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                EditorButton.IsEnabled = false; EditorButton.ToolTip = ex.Message;
+            }
         }
         ToolTipService.SetShowOnDisabled(EditorButton, true);
         ProfileSummary.Text = profile is null ? "No profile selected. Use Profiles to configure an editing kit." : $"Profile: {profile.Name}\nEditing Kit Folder: {profile.WorkingDirectory}\nData: {profile.Paths.DataRoot}\nTag precedence: {string.Join(" → ", profile.Paths.TagRoots.Select(r => r.Name))}\nMaps: {profile.Paths.MapsRoot}";
@@ -178,13 +200,20 @@ public partial class MainWindow : Window
     }
     private void TaskSelected(object sender, SelectionChangedEventArgs e)
     {
-        if (!ready) return; Render(); state.Settings.Value.Ui.LastPageId = operation.Id; SaveSettings();
+        if (!ready) return;
+        SessionDiagnostics.Write($"Tab switch: {operation.Id} -> {(TaskList.SelectedItem as NavigationItem)?.SlotId}; render starting");
+        Render();
+        SessionDiagnostics.Write($"Tab switch: {operation.Id}; render completed; saving settings");
+        state.Settings.Value.Ui.LastPageId = operation.Id; SaveSettings();
+        SessionDiagnostics.Write("Tab switch completed");
     }
     private void OperationSelected(object sender, SelectionChangedEventArgs e)
     {
         if (!ready || updatingSelector || OperationSelector.SelectedItem is not OperationDefinition selected) return;
+        SessionDiagnostics.Write($"Operation switch: {operation.Id} -> {selected.Id}; render starting");
         state.Settings.Value.Ui.OperationSelections[selected.SlotId] = selected.Id;
         Render(); state.Settings.Value.Ui.LastPageId = operation.Id; SaveSettings();
+        SessionDiagnostics.Write("Operation switch completed");
     }
     private void SidebarResized(object sender, DragCompletedEventArgs e)
     {
@@ -276,6 +305,7 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
+        SessionDiagnostics.Write($"Main window closing requested; allowClose={allowClose}; closing={closing}");
         if (allowClose) return;
         e.Cancel = true; if (closing) return; closing = true;
         try

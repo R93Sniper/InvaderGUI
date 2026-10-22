@@ -17,6 +17,7 @@ public sealed class TagHandlingForm : StackPanel
     private readonly TextBlock result = DialogUi.Text("");
     private TagHandlingState model;
     private ProjectProfile? loadedProfile;
+    private TagHandlingValidation? cachedValidation;
     private bool building;
     private bool preparing;
     private bool preparationAbandoned;
@@ -250,15 +251,18 @@ public sealed class TagHandlingForm : StackPanel
     private void Edited()
     {
         if (building || loadedProfile is null || loadError is not null) return;
+        cachedValidation = null;
         loadedProfile.OperationState[OperationId] = TagHandlingStates.Write(model); shell.Profiles.MarkDirty(); nextSave = DateTime.UtcNow.AddMilliseconds(700);
         ApplyEnabled(); RefreshValidation();
     }
     public void Flush() { if (shell.Profiles.IsDirty) shell.Profiles.Save(); nextSave = DateTime.UtcNow.AddSeconds(2); }
     public void CancelPreparation() => preparationAbandoned = true;
-    public void RefreshContext()
+    public void RefreshContext(bool revalidate = false)
     {
+        if (revalidate) cachedValidation = null;
         if (!ReferenceEquals(loadedProfile, shell.SelectedProfile))
         {
+            cachedValidation = null;
             Flush(); loadedProfile = shell.SelectedProfile; model = TagHandlingStates.New(OperationId); loadError = null;
             if (loadedProfile?.OperationState.TryGetValue(OperationId, out var saved) == true)
             {
@@ -278,7 +282,7 @@ public sealed class TagHandlingForm : StackPanel
     private RunView? LastHistory() => shell.History.FirstOrDefault(r => r.Snapshot.PageId == OperationId && r.Snapshot.ProfileId == loadedProfile?.Id);
     private void RefreshValidation()
     {
-        var check = TagHandlingBuilder.Build(OperationId, model, loadedProfile);
+        var check = cachedValidation ??= TagHandlingBuilder.Build(OperationId, model, loadedProfile);
         var operation = Operations.All.Single(o => o.Id == OperationId);
         var unavailable = model is RepairTagsState repair ? RepairWorkflow.AvailabilityErrors(repair, shell.Scan) :
             shell.Scan?.For(operation).Available == true ? Array.Empty<string>() : new[] { $"Unavailable: {operation.Executable}. Use Invader to select its installation." };
@@ -300,7 +304,7 @@ public sealed class TagHandlingForm : StackPanel
         try
         {
             RefreshContext(); if (loadError is not null) throw new InvalidOperationException("Repair or reset the saved form first.");
-            var check = TagHandlingBuilder.Build(OperationId, model, loadedProfile);
+            var check = cachedValidation = TagHandlingBuilder.Build(OperationId, model, loadedProfile);
             if (check.Invocation is not { } invocation) throw new ArgumentException(string.Join("\n", check.Errors));
             if (shell.Scan is null) throw new InvalidOperationException("Select an Invader installation.");
             // Store even an untouched initial root choice as a stable identity before launching.

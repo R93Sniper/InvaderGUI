@@ -26,6 +26,7 @@ public sealed class BuildMapForm : StackPanel
     private readonly ComboBox buildRoot = new() { DisplayMemberPath = "Name", ToolTip = "Choose the tag folder to build from. A single folder is used exclusively for scenario and tag lookup. Ordered tag folders uses the list under Editing kit paths and output." };
     private readonly FrameworkElement resourcesPanel, anniversary, stock, compression;
     private BuildMapState model = new();
+    private BuildMapValidation? cachedValidation;
     private ProjectProfile? loadedProfile;
     private string? loadError;
     private bool binding;
@@ -289,6 +290,7 @@ public sealed class BuildMapForm : StackPanel
     private void Edited()
     {
         if (binding || loadError is not null || loadedProfile is null) return;
+        cachedValidation = null;
         loadedProfile.OperationState["build-map"] = JsonSerializer.SerializeToElement(model, JsonFiles.Options);
         shell.Profiles.MarkDirty(); nextSave = DateTime.UtcNow.AddMilliseconds(700);
         RefreshValidation();
@@ -298,10 +300,12 @@ public sealed class BuildMapForm : StackPanel
         if (shell.Profiles.IsDirty) shell.Profiles.Save();
         nextSave = DateTime.UtcNow.AddSeconds(2);
     }
-    public void RefreshContext()
+    public void RefreshContext(bool revalidate = false)
     {
+        if (revalidate) cachedValidation = null;
         if (!ReferenceEquals(loadedProfile, shell.SelectedProfile))
         {
+            cachedValidation = null;
             Flush(); loadedProfile = shell.SelectedProfile; model = new(); loadError = null;
             if (loadedProfile?.OperationState.TryGetValue("build-map", out var saved) == true)
             {
@@ -322,7 +326,7 @@ public sealed class BuildMapForm : StackPanel
     private RunView? LastHistory() => shell.History.FirstOrDefault(r => r.Snapshot.PageId == "build-map" && r.Snapshot.ProfileId == loadedProfile?.Id);
     private void RefreshValidation()
     {
-        var check = BuildMapBuilder.Build(model, loadedProfile);
+        var check = cachedValidation ??= BuildMapBuilder.Build(model, loadedProfile);
         var operation = Operations.All.Single(o => o.Id == "build-map");
         var available = shell.Scan?.For(operation).Available == true;
         var busy = shell.Coordinator.Owner("build-map");
@@ -341,7 +345,7 @@ public sealed class BuildMapForm : StackPanel
         try
         {
             RefreshContext();
-            var check = BuildMapBuilder.Build(model, loadedProfile);
+            var check = cachedValidation = BuildMapBuilder.Build(model, loadedProfile);
             if (loadError is not null) throw new InvalidOperationException("Repair or reset the saved Build Map form first.");
             if (check.Invocation is not { } invocation) throw new ArgumentException(string.Join("\n", check.Errors));
             if (shell.Scan is null) throw new InvalidOperationException("Configure the Invader installation first.");
