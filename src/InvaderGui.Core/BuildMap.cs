@@ -161,7 +161,7 @@ public static class BuildMapBuilder
                 resourceOverride = s.ResourceDirectoryMode switch
                 {
                     "maps" => null,
-                    "profile" => Resolve(Required(p.Paths.ResourceMapsRoot, "Profile resource-map directory")),
+                    "profile" => Resolve(Required(p.Paths.EffectiveResourceMapsRoot, "Profile resource-map directory")),
                     "custom" => Resolve(Required(s.ResourceDirectory, "Resource-map directory")),
                     _ => throw new ArgumentException("Resource maps: choose Maps directory, Profile, or Custom.")
                 };

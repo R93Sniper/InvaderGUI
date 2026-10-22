@@ -31,6 +31,7 @@ public sealed class BuildMapForm : StackPanel
     private bool binding;
     private DateTime nextSave = DateTime.MinValue;
     private Guid? selectedPresetId;
+    private Action? refreshRenameDefault;
     public StackPanel StatusPanel { get; } = new();
     public StackPanel TagFolderSelector { get; } = new();
     public BuildMapState FormState => BuildMapState.Read(JsonSerializer.SerializeToElement(model, JsonFiles.Options));
@@ -49,7 +50,7 @@ public sealed class BuildMapForm : StackPanel
             model.TagRootIds = selected.Id is null ? null : new() { selected.Id };
             Edited(); BindRoots();
         };
-        var scenario = Text(input, "Scenario tag", () => model.Scenario, v => model.Scenario = v,
+        var scenario = Text(input, "Scenario tag", () => model.Scenario, v => { model.Scenario = v; refreshRenameDefault?.Invoke(); },
             "Select an existing .scenario under a tag root. Logical paths are relative to the ordered roots and omit .scenario.");
         var inputButtons = new WrapPanel(); input.Children.Add(inputButtons);
         inputButtons.Children.Add(DialogUi.Button("Browse scenario…", () => BrowseScenario(scenario)));
@@ -109,7 +110,12 @@ public sealed class BuildMapForm : StackPanel
         Toggle(advanced, "Errors-only output", () => model.Quiet, v => model.Quiet = v, "Ask Invader to emit only errors. Output Log still captures stdout and stderr.");
         Optional(advanced, "Override build string", () => model.BuildString, v => model.BuildString = v, "Fewer than 32 UTF-8 bytes. An enabled empty value explicitly supplies an empty build string.");
         Optional(advanced, "Forge CRC (hexadecimal)", () => model.ForgeCrc, v => model.ForgeCrc = v, "One to eight hexadecimal digits, optionally prefixed with 0x. Zero is a valid explicit value.");
-        Optional(advanced, "Rename scenario", () => model.RenameScenario, v => model.RenameScenario = v, "New scenario basename, without a directory or extension; also changes the default output filename.");
+        Optional(advanced, "Rename scenario", () => model.RenameScenario, v => model.RenameScenario = v, "New scenario basename, without a directory or extension; also changes the default output filename.",
+            defaultText: () =>
+            {
+                var basename = Path.GetFileName(model.Scenario.Trim().Replace('/', '\\'));
+                return basename.EndsWith(".scenario", StringComparison.OrdinalIgnoreCase) ? basename[..^9] : basename;
+            });
         compression = Optional(advanced, "Override Xbox compression level", () => model.CompressionLevel, v => model.CompressionLevel = v, "Integer 0–9; Invader defaults to 9. Retained but omitted for non-Xbox targets.");
         Optional(advanced, "Override tag space", () => model.TagSpace, v => model.TagSpace = v, "Unsigned byte count, uppercase K (KiB), M (MiB), or 0x hexadecimal; for example 64M or 0x4000000. An explicit zero is preserved.");
         Optional(advanced, "Use source index file", () => model.IndexFile, v => model.IndexFile = v, "Use an existing index file to control tag ordering.", "open");
@@ -154,7 +160,7 @@ public sealed class BuildMapForm : StackPanel
         combo.SelectionChanged += (_, _) => { if (!binding && combo.SelectedItem is ChoiceItem item) { set(item.Id); Edited(); BindEnabled(); } };
         bind.Add(() => combo.SelectedItem = items.FirstOrDefault(c => c.Id == get())); return combo;
     }
-    private FrameworkElement Optional(Panel parent, string label, Func<string?> get, Action<string?> set, string tip, string? picker = null)
+    private FrameworkElement Optional(Panel parent, string label, Func<string?> get, Action<string?> set, string tip, string? picker = null, Func<string>? defaultText = null)
     {
         var panel = new StackPanel { Margin = new Thickness(0, 3, 0, 5) }; parent.Children.Add(panel);
         var enabled = new CheckBox { Content = label, ToolTip = tip, Margin = new Thickness(3, 3, 3, 4) }; panel.Children.Add(enabled);
@@ -178,9 +184,24 @@ public sealed class BuildMapForm : StackPanel
             }); DockPanel.SetDock(browse, Dock.Right); row.Children.Add(browse);
         }
         row.Children.Add(text);
-        enabled.Click += (_, _) => { if (!binding) { row.Visibility = enabled.IsChecked == true ? Visibility.Visible : Visibility.Collapsed; set(enabled.IsChecked == true ? text.Text : null); Edited(); } };
+        if (defaultText is not null)
+        {
+            refreshRenameDefault = () =>
+            {
+                if (!string.IsNullOrWhiteSpace(get())) return;
+                var wasBinding = binding;
+                binding = true;
+                try
+                {
+                    text.Text = defaultText();
+                    if (enabled.IsChecked == true) set(text.Text);
+                }
+                finally { binding = wasBinding; }
+            };
+        }
+        enabled.Click += (_, _) => { if (!binding) { row.Visibility = enabled.IsChecked == true ? Visibility.Visible : Visibility.Collapsed; set(enabled.IsChecked == true ? text.Text : null); if (enabled.IsChecked != true && defaultText is not null) text.Text = defaultText(); Edited(); } };
         text.TextChanged += (_, _) => { if (!binding && enabled.IsChecked == true) { set(text.Text); Edited(); } };
-        bind.Add(() => { enabled.IsChecked = get() is not null; text.Text = get() ?? ""; row.Visibility = get() is not null ? Visibility.Visible : Visibility.Collapsed; });
+        bind.Add(() => { enabled.IsChecked = get() is not null; text.Text = get() ?? defaultText?.Invoke() ?? ""; row.Visibility = get() is not null ? Visibility.Visible : Visibility.Collapsed; });
         return panel;
     }
     private void PickFolder(TextBox field) { var path = DialogUi.PickFolder(Owner, field.Text); if (path is not null) field.Text = path; }
@@ -294,7 +315,7 @@ public sealed class BuildMapForm : StackPanel
         stateError.Text = loadError is null ? "" : "Saved Build Map form could not be loaded. Original values are preserved. " + loadError;
         stateError.Visibility = loadError is null ? Visibility.Collapsed : Visibility.Visible;
         reset.Visibility = loadError is null ? Visibility.Collapsed : Visibility.Visible;
-        paths.Text = loadedProfile is null ? "Select a profile in Settings." : $"Editing Kit Folder: {loadedProfile.WorkingDirectory}\nProfile data: {loadedProfile.Paths.DataRoot}\nProfile maps: {loadedProfile.Paths.MapsRoot}\nProfile resources: {loadedProfile.Paths.ResourceMapsRoot ?? "not configured"}\n{(model.TagRootIds is null ? "Using profile tag-root order." : "Using the selected tag-root order for Build Map.")}";
+        paths.Text = loadedProfile is null ? "Select a profile in Settings." : $"Editing Kit Folder: {loadedProfile.WorkingDirectory}\nProfile data: {loadedProfile.Paths.DataRoot}\nProfile maps: {loadedProfile.Paths.MapsRoot}\nProfile resources: {loadedProfile.Paths.EffectiveResourceMapsRoot}\n{(model.TagRootIds is null ? "Using profile tag-root order." : "Using the selected tag-root order for Build Map.")}";
         RefreshValidation();
     }
     private TaskRun? LastRun() => shell.Coordinator.Runs.LastOrDefault(r => r.Snapshot.PageId == "build-map" && r.Snapshot.ProfileId == loadedProfile?.Id);
