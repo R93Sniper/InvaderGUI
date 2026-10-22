@@ -1,0 +1,90 @@
+<UserControl x:Class="InvaderGui.App.RefactorPreview"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:core="clr-namespace:InvaderGui.Core;assembly=Core">
+ <UserControl.Resources>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#EEEEEE" /></Style>
+  <Style TargetType="TreeView"><Setter Property="Background" Value="#29292B" /><Setter Property="Foreground" Value="#EEEEEE" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Padding" Value="4" /></Style>
+  <Style TargetType="TreeViewItem"><Setter Property="Foreground" Value="#EEEEEE" /><Setter Property="Padding" Value="1,2" /><Setter Property="IsExpanded" Value="{Binding IsPlannedChange, Mode=OneTime}" /><Setter Property="ToolTip" Value="{Binding Details}" /></Style>
+  <HierarchicalDataTemplate DataType="{x:Type core:TagHierarchyNode}" ItemsSource="{Binding Children}"><TextBlock Text="{Binding Name}"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="#EEEEEE" /><Style.Triggers><DataTrigger Binding="{Binding IsPlannedChange}" Value="True"><Setter Property="Foreground" Value="#9DCEAD" /></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></HierarchicalDataTemplate>
+  <Style TargetType="GroupBox" BasedOn="{StaticResource {x:Type GroupBox}}"><Setter Property="Padding" Value="6" /><Setter Property="Margin" Value="0,0,0,7" /></Style>
+ </UserControl.Resources>
+ <Grid>
+  <Grid.ColumnDefinitions><ColumnDefinition Width="*" MinWidth="220" /><ColumnDefinition Width="8" /><ColumnDefinition x:Name="QueueColumn" Width="190" MinWidth="140" MaxWidth="420" /></Grid.ColumnDefinitions>
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition x:Name="HierarchyRow" Height="320" MinHeight="140" MaxHeight="720" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+  <Grid x:Name="HierarchyPanel">
+   <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="8" /><ColumnDefinition /></Grid.ColumnDefinitions>
+   <GroupBox Header="Current">
+    <TreeView x:Name="CurrentTree" SelectedItemChanged="TagSelected" VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling" />
+   </GroupBox>
+   <GroupBox Grid.Column="2" Header="Planned">
+    <TreeView x:Name="PlannedTree" SelectedItemChanged="TagSelected" AllowDrop="True" PreviewMouseLeftButtonDown="PlannedMouseDown" PreviewMouseMove="PlannedMouseMove" DragOver="PlannedDragOver" Drop="PlannedDrop" PreviewKeyDown="PlannedKeyDown" PreviewMouseRightButtonDown="PlannedRightClick" VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling">
+     <TreeView.ContextMenu><ContextMenu><MenuItem Header="Rename…" InputGestureText="F2" Click="RenameSelected" /></ContextMenu></TreeView.ContextMenu>
+    </TreeView>
+   </GroupBox>
+  </Grid>
+  <Thumb x:Name="HierarchyResizeHandle" Grid.Row="1" Height="8" Cursor="SizeNS" DragDelta="ResizeHierarchies" ToolTip="Drag up or down to resize both tag hierarchies.">
+   <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#222222"><Border Width="42" Height="3" Background="#77777B" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border></ControlTemplate></Thumb.Template>
+  </Thumb>
+  <GroupBox x:Name="OperationEditor" Grid.Row="2" Header="Operation editor" IsEnabled="False">
+   <StackPanel>
+    <TextBlock x:Name="EditorModeStatus" FontWeight="SemiBold" Foreground="#B8D7EB" Margin="0,0,0,5" Visibility="Collapsed" />
+    <Grid Margin="0,0,0,6">
+     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="12" /><ColumnDefinition /></Grid.ColumnDefinitions>
+     <StackPanel><TextBlock Text="Action" /><ComboBox x:Name="ModeSelector" SelectedIndex="0" SelectionChanged="ModeSelected"><ComboBoxItem Content="Move" /><ComboBoxItem Content="Copy" /><ComboBoxItem Content="References only" /></ComboBox></StackPanel>
+     <StackPanel Grid.Column="2"><TextBlock Text="Mapping" /><ComboBox x:Name="MappingSelector" SelectedIndex="0" SelectionChanged="MappingSelected"><ComboBoxItem Content="Individual tags" /><ComboBoxItem Content="Recursive folder" /><ComboBoxItem Content="Tag groups" /><ComboBoxItem Content="String replacements only" /></ComboBox></StackPanel>
+    </Grid>
+    <Grid x:Name="MappingFields">
+     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="24" /><ColumnDefinition /></Grid.ColumnDefinitions>
+     <TextBlock x:Name="SourceLabel" Text="Source tag" /><TextBlock x:Name="DestinationLabel" Grid.Column="2" Text="Destination tag" />
+     <ComboBox x:Name="SourceField" Grid.Row="1" IsEditable="True" IsTextSearchEnabled="False" Margin="0,3,0,3" />
+     <TextBlock Grid.Row="1" Grid.Column="1" Text="→" HorizontalAlignment="Center" VerticalAlignment="Center" />
+     <ComboBox x:Name="DestinationField" Grid.Row="1" Grid.Column="2" IsEditable="True" IsTextSearchEnabled="False" Margin="0,3,0,3" />
+    </Grid>
+    <StackPanel x:Name="ExtraMappings" />
+    <DockPanel x:Name="EditorActionsRow" Margin="0,3,0,0">
+     <WrapPanel x:Name="EditorActionButtons" DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Top">
+      <Button x:Name="AddMappingButton" Content="+ Add mapping" VerticalAlignment="Top" Click="AddMapping" />
+      <Button x:Name="CancelEditButton" Content="Cancel edit" VerticalAlignment="Top" Visibility="Collapsed" Click="CancelCommandEdit" />
+      <Button x:Name="StageActionButton" Content="Stage action" VerticalAlignment="Top" Click="StageFromEditor" />
+     </WrapPanel>
+    <Expander x:Name="StringReplacements" Header="String replacements" Foreground="#EEEEEE" Margin="0,5,4,0">
+     <StackPanel Margin="0,6,0,0"><TextBlock Text="Apply each replacement in order." Foreground="#BABAC0" /><Grid Margin="0,4,0,0"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="24" /><ColumnDefinition /><ColumnDefinition Width="28" /></Grid.ColumnDefinitions><TextBlock Text="Find" /><TextBlock Grid.Column="2" Text="Replace with" /></Grid><StackPanel x:Name="ReplacementRows" /><Button Content="+ Add replacement" HorizontalAlignment="Left" Click="AddReplacement" /></StackPanel>
+    </Expander>
+    </DockPanel>
+    <Expander x:Name="AdditionalGroups" Header="Additional group mappings" Foreground="#EEEEEE" Margin="0,4,0,0" Visibility="Collapsed">
+     <StackPanel><StackPanel x:Name="AdditionalGroupRows" /><Button Content="+ Add group mapping" HorizontalAlignment="Left" Click="AddGroupMapping" /></StackPanel>
+    </Expander>
+    <ScrollViewer MaxHeight="76" VerticalScrollBarVisibility="Auto"><TextBlock x:Name="EditorValidation" Foreground="Salmon" TextWrapping="Wrap" Margin="0,4,0,0" /></ScrollViewer>
+   </StackPanel>
+  </GroupBox>
+  <TextBlock x:Name="HierarchyStatus" Grid.Row="3" Text="Select a profile and tag folder to load tags." Foreground="#BABAC0" TextWrapping="Wrap" Margin="2,0,2,5" />
+  </Grid>
+  </ScrollViewer>
+  <GridSplitter x:Name="QueueResizeHandle" Grid.Column="1" Width="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="#454548" ToolTip="Drag left or right to resize the Command Queue." />
+  <DockPanel Grid.Column="2" LastChildFill="True" Margin="4,0,0,0">
+   <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,5">
+    <Button x:Name="PlanRebindButton" Content="Use selected tag folders…" Click="RebindPlanClick" Visibility="Collapsed" ToolTip="Explicitly bind this plan to the selected profile and tag folders, then refresh and validate it." />
+    <WrapPanel HorizontalAlignment="Right"><Button x:Name="PlanSaveAsButton" Content="Save As" Click="SavePlanAsClick" IsEnabled="False" ToolTip="Save the pending queue to a file you choose." /><Button x:Name="PlanSaveButton" Content="Save" Click="SavePlanClick" IsEnabled="False" ToolTip="Save the pending queue. An open command edit is validated and applied before saving."><Button.ContextMenu><ContextMenu><MenuItem Header="Save as…" Click="SavePlanAsClick" /></ContextMenu></Button.ContextMenu></Button><Button x:Name="PlanLoadButton" Content="Load" Click="LoadPlanClick" /></WrapPanel>
+   </StackPanel>
+   <GroupBox Header="Command Queue">
+    <DockPanel LastChildFill="True">
+     <TextBlock DockPanel.Dock="Top" Text="Run from top to bottom" Foreground="#BABAC0" Margin="0,0,0,6" />
+     <TextBlock x:Name="QueueBindingStatus" DockPanel.Dock="Top" Text="No commands staged." Foreground="#BABAC0" TextWrapping="Wrap" Margin="0,0,0,6" />
+     <StackPanel DockPanel.Dock="Bottom">
+      <Expander Header="Selected command" Foreground="#EEEEEE" Margin="0,4,0,0"><ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto"><TextBlock Text="{Binding SelectedItem.Details, ElementName=CommandQueue}" TextWrapping="Wrap" Margin="2,4,2,4" /></ScrollViewer></Expander>
+      <WrapPanel Margin="0,4,0,0"><Button x:Name="QueueAddButton" Content="Add" Click="NewQueueCommand" IsEnabled="False" /><Button x:Name="QueueEditButton" Content="Edit" Click="EditQueueCommand" IsEnabled="False" /><Button x:Name="QueueRemoveButton" Content="Remove" Click="RemoveQueueCommand" IsEnabled="False" ToolTip="Remove the selected pending command. Completed file changes are not affected." /><Button x:Name="QueueUpButton" Content="Move up" Click="MoveQueueCommandUp" IsEnabled="False" ToolTip="Move earlier in the queue (Alt+Up)." /><Button x:Name="QueueDownButton" Content="Move down" Click="MoveQueueCommandDown" IsEnabled="False" ToolTip="Move later in the queue (Alt+Down)." /></WrapPanel>
+     </StackPanel>
+     <AdornerDecorator>
+     <ListBox x:Name="CommandQueue" Background="#29292B" Foreground="#F0F0F0" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AllowDrop="True" SelectionChanged="QueueSelectionChanged" MouseDoubleClick="QueueDoubleClick" PreviewKeyDown="QueueKeyDown" PreviewMouseLeftButtonDown="QueueMouseDown" PreviewMouseMove="QueueMouseMove" DragOver="QueueDragOver" Drop="QueueDrop" DragLeave="QueueDragLeave">
+      <ListBox.ItemTemplate><DataTemplate><StackPanel ToolTip="{Binding Details}"><TextBlock Text="{Binding Caption}" TextWrapping="Wrap" /><TextBlock Text="{Binding Problem}" Foreground="Salmon" TextWrapping="Wrap" /></StackPanel></DataTemplate></ListBox.ItemTemplate>
+     </ListBox>
+     </AdornerDecorator>
+    </DockPanel>
+   </GroupBox>
+  </DockPanel>
+ </Grid>
+</UserControl>
