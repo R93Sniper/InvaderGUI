@@ -7,6 +7,13 @@ You are **_required_** to have an install of Invader for this wrapper to work. T
 This was built against Invader version `0.55.0.r4134.33518109`, which is the latest version as of time of creation.
 
 
+Installation Instructions
+----------------------------------------------------------------------------------------------
+1. Go to the releases tab and download the built files.
+2. Ensure you have the [.NET 8 Runtime installed](https://dotnet.microsoft.com/en-us/download/dotnet/8.0).
+3. Run the `.exe` file and enjoy your modding experience!
+
+
 Features
 ----------------------------------------------------------------------------------------------
 This UI provides access to every one of Invader's tools minus `invader-edit`. There is access to `invader-edit-qt` however, so the functionality is still there.</br>
@@ -27,8 +34,9 @@ The UI provides drag and drop behavior in the planned window. You can move and r
 
 AI Disclosure
 ----------------------------------------------------------------------------------------------
-A significant portion of this work was created using Codex. The code has been reviewed by a human (me) and I've also written parts of the code myself by hand. </br>
-AI was simply used as a means to speed the process up and build up some familiarity with a WPF workflow, as it is new to me.
+A significant portion of this work was sloperated using Codex. The code has been reviewed by a human (me) and I've also written parts of the code myself by hand. </br>
+AI was simply used as a means to speed the process up and build up some familiarity with a WPF workflow, as it is new to me.</br>
+There is no malicious code in this repo (from what I reviewed), and the code is Open Source as GPLv3 so you can review it yourself as need be. If this still sketches you out or you do not want to use anything AI Assisted/Sloperated then this is not a program for you. 
 
 
 Credits
