@@ -63,6 +63,12 @@ public sealed class ProjectProfile
 
     public ProjectProfile Copy() => JsonSerializer.Deserialize<ProjectProfile>(JsonSerializer.Serialize(this, JsonFiles.Options), JsonFiles.Options)!;
 
+    public static ProjectProfile CreateNew(string name = "New profile") => new()
+    {
+        Name = name,
+        Paths = new ProfilePaths { TagRoots = new() { new TagRoot() } }
+    };
+
     public bool RemoveTagRoot(string rootId)
     {
         var root = Paths.TagRoots.FirstOrDefault(r => r.Id == rootId);

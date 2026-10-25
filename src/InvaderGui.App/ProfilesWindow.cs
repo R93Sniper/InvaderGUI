@@ -156,7 +156,7 @@ public sealed class ProfilesWindow : UtilityWindow
     {
         if (!CanAbandon()) return;
         Select(null);
-        Load(new ProjectProfile { Name = UniqueName("New profile"), Paths = new ProfilePaths { TagRoots = new() { new TagRoot() } } });
+        Load(ProjectProfile.CreateNew(UniqueName("New profile")));
     }
     private void Duplicate()
     {
