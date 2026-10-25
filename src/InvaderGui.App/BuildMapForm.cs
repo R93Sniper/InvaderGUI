@@ -75,7 +75,14 @@ public sealed class BuildMapForm : StackPanel
         fields.Children.Add(new Expander { Header = "Editing kit paths and output", Foreground = Brushes.WhiteSmoke, Content = pathFields, Margin = new Thickness(0, 8, 0, 8) });
         pathFields.Children.Add(paths);
         Optional(pathFields, "Override data directory", () => model.DataOverride, v => model.DataOverride = v, "Default uses the profile's data directory. Relative overrides resolve beneath the Editing Kit Folder.", "folder");
-        Optional(pathFields, "Override maps directory", () => model.MapsOverride, v => model.MapsOverride = v, "Default uses the profile's maps directory for output and resource lookup.", "folder");
+        Optional(pathFields, "Override maps directory", () => model.MapsOverride, v => model.MapsOverride = v, "Overrides the profile's maps directory. Used for default output and resource lookup when the profile has no resource-map directory.", "folder");
+        Optional(pathFields, "Override output map directory", () => model.OutputDirectory, v => model.OutputDirectory = v,
+            "Select the folder for the built map. The filename uses the scenario name, or Rename scenario when enabled. Does not change resource-map lookup.", "folder");
+        var resourceOverride = Optional(pathFields, "Override resource-map directory",
+            () => model.ResourceDirectoryMode == "custom" ? model.ResourceDirectory : null,
+            v => { model.ResourceDirectoryMode = v is null ? "profile" : "custom"; if (v is not null) model.ResourceDirectory = v; },
+            "Default uses the profile's resource-map directory, or the effective maps directory if it is blank. Enable to select a custom resource-map folder. Applies when Check or Always resource usage is active.", "folder");
+        enabledBindings.Add(() => resourceOverride.IsEnabled = BuildMapBuilder.SupportsResources(model.Engine) && model.ResourceUsage is "check" or "always");
         pathFields.Children.Add(DialogUi.Text("Tag roots in precedence order (first match wins)")); pathFields.Children.Add(roots);
         var rootButtons = new WrapPanel(); pathFields.Children.Add(rootButtons); rootButtons.Children.Add(addRoot);
         rootButtons.Children.Add(DialogUi.Button("Add root", () =>
@@ -94,15 +101,6 @@ public sealed class BuildMapForm : StackPanel
         rootButtons.Children.Add(DialogUi.Button("Up", () => MoveRoot(-1)));
         rootButtons.Children.Add(DialogUi.Button("Down", () => MoveRoot(1)));
         rootButtons.Children.Add(DialogUi.Button("Use profile order", () => { model.TagRootIds = null; Edited(); BindRoots(); }));
-        Choice(pathFields, "Resource-map directory", () => model.ResourceDirectoryMode, v => model.ResourceDirectoryMode = v,
-            Choices(("maps", "Use effective maps directory (Invader default)"), ("profile", "Use profile resource-map directory"), ("custom", "Custom directory")),
-            "Applies only when Check or Always resource usage is active. Custom Edition needs bitmaps.map, sounds.map and loc.map; PC and MCC need bitmaps.map and sounds.map.");
-        var resourcePath = Text(pathFields, "Custom resource-map directory", () => model.ResourceDirectory, v => model.ResourceDirectory = v,
-            "Relative paths resolve beneath the Editing Kit Folder. Active only for Custom directory with resources enabled.");
-        var resourceBrowse = DialogUi.Button("Browse resource directory…", () => PickFolder(resourcePath)); pathFields.Children.Add(resourceBrowse);
-        enabledBindings.Add(() => { resourcePath.IsEnabled = resourceBrowse.IsEnabled = BuildMapBuilder.SupportsResources(model.Engine) && model.ResourceUsage is "check" or "always" && model.ResourceDirectoryMode == "custom"; });
-        Optional(pathFields, "Override output map", () => model.Output, v => model.Output = v,
-            "Default writes maps/<scenario name>.map. Existing output maps are replaced. A different extension or basename may prevent the game from loading the map.", "save");
 
         var advanced = new StackPanel(); fields.Children.Add(new Expander { Header = "Additional settings", Foreground = Brushes.WhiteSmoke, Content = advanced, Margin = new Thickness(0, 4, 0, 8) });
         anniversary = Toggle(advanced, "Anniversary graphics and audio (MCC CEA only)", () => model.Anniversary, v => model.Anniversary = v, "Enable Anniversary graphics and audio for MCC CEA. Retained but omitted for other targets.");

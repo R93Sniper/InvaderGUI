@@ -16,9 +16,9 @@ public sealed class BuildMapState
     public string? DataOverride { get; set; }
     public string? MapsOverride { get; set; }
     public List<string>? TagRootIds { get; set; }
-    public string ResourceDirectoryMode { get; set; } = "maps";
+    public string ResourceDirectoryMode { get; set; } = "profile";
     public string ResourceDirectory { get; set; } = "";
-    public string? Output { get; set; }
+    public string? OutputDirectory { get; set; }
     public bool Optimize { get; set; }
     public bool HideWarnings { get; set; }
     public bool ExtendLimits { get; set; }
@@ -42,6 +42,14 @@ public sealed class BuildMapState
         if (state.SchemaVersion != 1 || state.Scenario is null || state.Engine is null || state.ResourceDirectory is null ||
             state.ResourceDirectoryMode is null || state.TagRootIds?.Any(string.IsNullOrWhiteSpace) == true)
             throw new JsonException("Build Map state has an unsupported version or invalid structure.");
+        // Older forms stored a complete output filename. Retain its directory only.
+        if (!json.TryGetProperty("outputDirectory", out _) && json.TryGetProperty("output", out var legacyOutput) && legacyOutput.ValueKind == JsonValueKind.String)
+        {
+            var oldPath = legacyOutput.GetString()!;
+            state.OutputDirectory = string.IsNullOrWhiteSpace(oldPath) ? oldPath : Path.GetDirectoryName(oldPath) is { Length: > 0 } directory ? directory : ".";
+        }
+        state.Extra?.Remove("output");
+        if (state.ResourceDirectoryMode == "maps") state.ResourceDirectoryMode = "profile";
         return state;
     }
 
@@ -150,7 +158,8 @@ public static class BuildMapBuilder
                     errors.Add("Scenario: an earlier tag root owns this logical path. Reorder the roots to select this scenario; filesystem interpretation does not change tag precedence.");
             }
             var outputName = s.RenameScenario ?? Path.GetFileName(logical);
-            var output = s.Output is null ? Path.Combine(p.Paths.MapsRoot, outputName + ".map") : Resolve(Required(s.Output, "Output map"));
+            var outputDirectory = s.OutputDirectory is null ? p.Paths.MapsRoot : Resolve(Required(s.OutputDirectory, "Output map directory"));
+            var output = Path.Combine(outputDirectory, outputName + ".map");
             if (!Directory.Exists(Path.GetDirectoryName(output))) errors.Add($"Output map: parent folder does not exist: {Path.GetDirectoryName(output)}");
             if (Directory.Exists(output)) errors.Add("Output map: select a file, not a directory.");
             if (string.Equals(output, scenarioFile, StringComparison.OrdinalIgnoreCase)) errors.Add("Output map cannot replace the scenario input.");
@@ -160,10 +169,9 @@ public static class BuildMapBuilder
             {
                 resourceOverride = s.ResourceDirectoryMode switch
                 {
-                    "maps" => null,
-                    "profile" => Resolve(Required(p.Paths.EffectiveResourceMapsRoot, "Profile resource-map directory")),
+                    "maps" or "profile" => string.IsNullOrWhiteSpace(p.Paths.ResourceMapsRoot) ? null : Resolve(p.Paths.ResourceMapsRoot),
                     "custom" => Resolve(Required(s.ResourceDirectory, "Resource-map directory")),
-                    _ => throw new ArgumentException("Resource maps: choose Maps directory, Profile, or Custom.")
+                    _ => throw new ArgumentException("Resource maps: choose the profile default or a custom directory.")
                 };
                 var directory = resourceOverride ?? p.Paths.MapsRoot;
                 foreach (var name in s.Engine == "gbx-custom" ? new[] { "bitmaps.map", "sounds.map", "loc.map" } : new[] { "bitmaps.map", "sounds.map" })
@@ -188,7 +196,7 @@ public static class BuildMapBuilder
             Value("--level", IsXbox(s.Engine) ? s.CompressionLevel : null);
             Value("--maps", p.Paths.MapsRoot);
             Value("--rename-scenario", s.RenameScenario);
-            Value("--output", s.Output is null ? null : output);
+            Value("--output", s.OutputDirectory is null ? null : output);
             Flag("--optimize", s.Optimize);
             Flag("--fs-path", s.FilesystemPath);
             Flag("--quiet", s.Quiet);
