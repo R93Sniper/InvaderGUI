@@ -42,20 +42,33 @@ public sealed class ShellViewModel : Bindable
             Settings.MarkDirty(); Changed();
         }
     }
-    public string ApplicationDirectory { get; } = AppContext.BaseDirectory;
+    public string ApplicationDirectory { get; }
     public string LogsDirectory => Path.GetFullPath(Settings.Value.Logs.Directory, ApplicationDirectory);
     public string? StartupWarning { get; private set; }
 
-    public ShellViewModel()
+    public ShellViewModel(string? applicationDirectory = null)
     {
-        Settings = new(Path.Combine(ApplicationDirectory, "invader-gui.settings.json"), DocumentValidation.Settings);
-        Profiles = new(Path.Combine(ApplicationDirectory, "invader-gui.profiles.json"), DocumentValidation.Profiles);
+        ApplicationDirectory = Path.GetFullPath(applicationDirectory ?? AppContext.BaseDirectory);
+        Settings = new(Path.Combine(ApplicationDirectory, "preferences.json"), DocumentValidation.Settings);
+        Profiles = new(Path.Combine(ApplicationDirectory, "profiles.json"), DocumentValidation.Profiles);
         Presets = new(Path.Combine(ApplicationDirectory, "presets.json"), DocumentValidation.Presets);
-        Settings.Load(); Profiles.Load(); Presets.Load();
+        var profilesExisted = File.Exists(Profiles.FilePath);
+        Settings.Load();
+        var profilesLoaded = Profiles.Load();
+        Presets.Load();
+        var createDefault = profilesLoaded && !profilesExisted && Profiles.Value.Profiles.Count == 0;
+        if (createDefault)
+        {
+            var profile = ProjectProfile.CreateNew("Default");
+            Profiles.Value.Profiles.Add(profile);
+            Settings.Value.SelectedProfileId = profile.Id;
+            Profiles.MarkDirty();
+        }
         if (Operations.NormalizeSelections(Settings.Value.Ui.OperationSelections)) Settings.MarkDirty();
         foreach (var group in Operations.Visible.GroupBy(o => o.SlotId))
             Navigation.Add(new(group.Key, group.Key switch { "asset-interchange" => "Asset Interchange", "tag-handling" => "Tag Handling", "map-tools" => "Map Tools", _ => group.First().Name }));
         RefreshProfiles(Settings.Value.SelectedProfileId);
+        if (createDefault) { Profiles.Save(); Settings.Save(); }
         try
         {
             History = RunHistory.Load(LogsDirectory, Settings.Value.Logs.RetainRunCount, out var warning).ToList();
