@@ -278,7 +278,7 @@ public partial class MainWindow : Window
             ShowInTaskbar = false
         };
         var content = DialogUi.Column();
-        content.Children.Add(DialogUi.Text("Invader GUI\n\nBuild 1.0.2\nInvader Version 0.55.0.r4134.33518109\n\nLicensed under GPLv3\nSource Code Available here:"));
+        content.Children.Add(DialogUi.Text("Invader GUI\n\nBuild 1.0.3\nInvader Version 0.55.0.r4134.33518109\n\nLicensed under GPLv3\nSource Code Available here:"));
         var link = new Hyperlink(new Run("https://github.com/R93Sniper/InvaderGUI/"))
         {
             NavigateUri = new Uri("https://github.com/R93Sniper/InvaderGUI/"),
